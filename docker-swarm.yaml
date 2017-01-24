@@ -1,0 +1,310 @@
+heat_template_version: 2013-05-23
+
+description: 'Docker Swarm'
+
+parameters:
+  flavor:
+    type: string
+    description: 'Flavor to be used for compute instance'
+  key_name:
+    type: string
+    description: 'For most clouds, the name of the key-pair to be used for the compute instance; for VMware clouds, the contents of the public SSH key for the compute instance'
+  availability_zone:
+    type: string
+    description: 'Name of availability zone in which to create the instance'
+    default: 'nova'
+  public_network_id:
+    type: string
+    label: 'Public Network'
+    description: 'Generated for floating IP'
+    default: 'public_network_id'
+  private_network_id:
+    type: string
+    label: 'Private Network'
+    description: 'Generated to reference ''private'' network.'
+    default: 'private_network_id'
+  manager:
+    type: string
+    description: 'OS Image for the Docker Swarm Manager Servers'
+    label: Manager
+    default: 
+  worker:
+    type: string
+    description: 'OS Image for the Docker Swarm Worker Servers'
+    label: Worker
+    default: 
+  ucd_server_url:
+    type: string
+    description: 'The server URL for agent communication to UrbanCode Deploy. Do *not* add a trailing slash.'
+    default: 'http://192.168.27.100:8080'
+  ucd_user:
+    type: string
+    description: 'The user credential for the UrbanCode Deploy server.'
+    default: 'PasswordIsAuthToken'
+  ucd_password:
+    type: string
+    description: 'The user credential for the UrbanCode Deploy server.'
+    hidden: true
+  ucd_relay_url:
+    type: string
+    description: 'The server URL for an agent relay - leave as ''None'' to enable agents to communicate with server directly.'
+    default: 'None'
+parameter_groups:
+    - { label: 'Agent Parameters', parameters: [ucd_password, ucd_relay_url, ucd_server_url, ucd_user] }
+    - { label: 'Image Parameters', parameters: [flavor, key_name, manager, worker] }
+    - { label: 'Network Parameters', parameters: [availability_zone, private_network_id, public_network_id] }
+resources:
+
+  manager-srv:
+    type: OS::Nova::Server
+    properties:
+      user_data: {get_resource: manager_mime }
+      user_data_format: RAW
+      networks:
+          - port: {get_resource: manager__to__private_network_id__port }
+      name: manager
+      image: {get_param: manager } # ubuntu-14.04-amd64
+      flavor: { get_param: flavor }
+      key_name: { get_param: key_name }
+      availability_zone: { get_param: availability_zone }
+      metadata: 
+        "__os_type__" : "Linux"
+
+
+  docker-engine2:
+    depends_on: docker-engine
+    type: IBM::UrbanCode::SoftwareDeploy::UCD
+    properties:
+      apply_config: { get_resource: docker-engine_sw_config1 }
+      server: manager-srv
+      version: '1.13'
+      agent_timeout: "360"
+
+  docker-engine_sw_config1:
+    type: IBM::UrbanCode::SoftwareConfig::UCD
+    properties: 
+      name: "docker-engine"
+      component_process: 'create new docker swarm'
+      component_process_timeout: "300"
+      ucd_server_url: { get_param: ucd_server_url } # these should come from resource_tree
+      ucd_username: { get_param: ucd_user }
+      ucd_password: { get_param: ucd_password }
+      application: { get_attr: [resource_tree, application_name] }
+      environment_name: { get_attr: [resource_tree, environment_name] }
+
+  manager_mime:
+    type: OS::Heat::MultipartMime
+    properties:
+      parts:
+        - config: { get_resource: ucd_agent_install_linux }
+          subtype: "x-shellscript"
+
+  docker-engine:
+    type: IBM::UrbanCode::SoftwareDeploy::UCD
+    properties:
+      apply_config: { get_resource: docker-engine_sw_config }
+      server: manager-srv
+      version: '1.13'
+      agent_timeout: "360"
+
+  docker-engine_sw_config:
+    type: IBM::UrbanCode::SoftwareConfig::UCD
+    properties: 
+      name: "docker-engine"
+      component_process: 'install docker-engine'
+      component_process_timeout: "300"
+      ucd_server_url: { get_param: ucd_server_url } # these should come from resource_tree
+      ucd_username: { get_param: ucd_user }
+      ucd_password: { get_param: ucd_password }
+      application: { get_attr: [resource_tree, application_name] }
+      environment_name: { get_attr: [resource_tree, environment_name] }
+
+  manager__to__private_network_id__floating_ip:
+    type: OS::Neutron::FloatingIP
+    properties:
+      floating_network_id: { get_param: public_network_id }
+      port_id: {get_resource: manager__to__private_network_id__port }
+
+  manager__to__private_network_id__port:
+    type: OS::Neutron::Port
+    properties:
+      security_groups:
+        - { get_resource: docker-swarm-sg }
+      network_id: { get_param: private_network_id }
+      replacement_policy: AUTO   #TODO remove this if using HEAT version Icehouse!
+
+  docker-swarm-sg:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      name: Docker Swarm Security Group
+      rules:
+        - direction: ingress
+          port_range_min: 22
+          port_range_max: 22
+          protocol: tcp
+          ethertype: IPv4
+          remote_ip_prefix: 0.0.0.0/0
+        - direction: ingress
+          port_range_min: 2375
+          port_range_max: 2375
+          protocol: tcp
+          ethertype: IPv4
+          remote_ip_prefix: 0.0.0.0/0
+        - direction: ingress
+          port_range_min: 2377
+          port_range_max: 2377
+          protocol: tcp
+          ethertype: IPv4
+          remote_ip_prefix: 0.0.0.0/0
+        - direction: ingress
+          port_range_min: 7946
+          port_range_max: 7946
+          protocol: tcp
+          ethertype: IPv4
+          remote_ip_prefix: 0.0.0.0/0
+        - direction: ingress
+          port_range_min: 7946
+          port_range_max: 7946
+          protocol: udp
+          ethertype: IPv4
+          remote_ip_prefix: 0.0.0.0/0
+        - direction: ingress
+          port_range_min: 4789
+          port_range_max: 4789
+          protocol: tcp
+          ethertype: IPv4
+          remote_ip_prefix: 0.0.0.0/0
+        - direction: ingress
+          port_range_min: 4789
+          port_range_max: 4789
+          protocol: udp
+          ethertype: IPv4
+          remote_ip_prefix: 0.0.0.0/0
+          
+  autoscaling-group:
+    type: OS::Heat::AutoScalingGroup
+    properties:
+      min_size: 1
+      max_size: 10
+      resource:
+          type: ./nested/docker-swarm_worker.yaml
+          properties:
+            docker-swarm-sg: { get_resource: docker-swarm-sg }
+            ucd_relay_url: { get_param: ucd_relay_url }
+            environment_name: { get_attr: [resource_tree, environment_name ] }
+            application_name: { get_attr: [resource_tree, application_name ] }
+            ucd_password: { get_param: ucd_password }
+            ucd_user: { get_param: ucd_user }
+            ucd_server_url: { get_param: ucd_server_url }
+            private_network_id: { get_param: private_network_id }
+            worker: { get_param: worker }
+            flavor: { get_param: flavor }
+            key_name: { get_param: key_name }
+            availability_zone: { get_param: availability_zone }
+
+  autoscaling-group_scaleup_policy:
+    type: OS::Heat::ScalingPolicy
+    properties:
+      adjustment_type: change_in_capacity
+      auto_scaling_group_id: {get_resource: autoscaling-group}
+      cooldown: 60
+      scaling_adjustment: 1
+
+  autoscaling-group_scaledown_policy:
+    type: OS::Heat::ScalingPolicy
+    properties:
+      adjustment_type: change_in_capacity
+      auto_scaling_group_id: {get_resource: autoscaling-group}
+      cooldown: 60
+      scaling_adjustment: -1
+
+  autoscaling-group_scaleup_policy_cpu_alarm_high:
+    type: OS::Ceilometer::Alarm
+    properties:
+      meter_name: cpu_util
+      statistic: avg
+      period: 60
+      evaluation_periods: 1
+      threshold: 50
+      alarm_actions:
+        - {get_attr: [autoscaling-group_scaleup_policy, alarm_url]}
+      matching_metadata: {'metadata.user_metadata.stack': {get_param: "OS::stack_id"}}
+      comparison_operator: gt
+
+  autoscaling-group_scaledown_policy_cpu_alarm_low:
+    type: OS::Ceilometer::Alarm
+    properties:
+      meter_name: cpu_util
+      statistic: avg
+      period: 60
+      evaluation_periods: 1
+      threshold: 15
+      alarm_actions:
+        - {get_attr: [autoscaling-group_scaledown_policy, alarm_url]}
+      matching_metadata: {'metadata.user_metadata.stack': {get_param: "OS::stack_id"}}
+      comparison_operator: lt
+
+  resource_tree:
+    type: IBM::UrbanCode::ResourceTree
+    properties:
+       urbancode_deploy_url: { get_param: ucd_server_url }
+       username: { get_param: ucd_user }
+       password: { get_param: ucd_password }
+       team_mappings: 
+       application: docker-swarm
+       base_resource_group: 
+
+  ucd_agent_install_linux:
+    type: OS::Heat::SoftwareConfig
+    properties:
+      config:
+        str_replace:
+          template: |
+            #!/usr/bin/env bash
+            #ifconfig eth0 mtu 1454 ## Optionally patch the MTU
+            export PATH=$PATH:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/root/bin
+            arch=`uname -ms | awk '{print tolower($0)}' | tr " " "-" `
+            agent_archive=ibm-ucd-agent-$arch.tgz
+            if [ "_ucd_relay_url_" != "None" ]; then
+              proxy_args="--proxy _ucd_relay_url_:20080"
+              ucd_remote_host=_ucd_relay_url_
+              agent_args="-r -d"
+            else
+              proxy_args=
+              agent_args=
+              ucd_remote_host=_ucd_server_url_
+            fi
+            if command -V apt-get && ! command -V curl; then apt-get -y install curl; fi
+            if command -V yum && ! command -V curl; then yum -y install curl; fi
+            curl $proxy_args -Lk --retry 10 --retry-delay 10 --retry-max-time 120 -o /tmp/$agent_archive -u _ucd_user_:_ucd_password_ "_ucd_server_url_/cli/version/downloadArtifacts?component=ucd-agent-$arch&version=_agent_version_&singleFilePath=$agent_archive"
+            tar xfz /tmp/$agent_archive -C /tmp
+            /tmp/ibm-ucd-agent-install/install-agent-with-options.sh -t "_agent_team_" -s $ucd_remote_host $agent_args -x start -v -n _agent_name_
+          params:
+            _agent_name_:
+               str_replace:
+                  template: |
+                    "_application_name_._environment_name_"
+                  params:
+                    _application_name_: { get_attr: [resource_tree, application_name ] }
+                    _environment_name_: { get_param: "OS::stack_name" }
+            _ucd_server_url_: { get_param: ucd_server_url }
+            _ucd_relay_url_: { get_param: ucd_relay_url }
+            _ucd_user_ : { get_param: ucd_user }
+            _ucd_password_ : { get_param: ucd_password }
+            _agent_version_ : 7.1
+            _agent_team_ : ""
+
+outputs:
+  blueprint_url:
+    description: Blueprint Origin URL
+    value:  http://192.168.27.100:9080/landscaper/view/projects?open=demo_d3c9ba14_1a63_4ce0_bb87_109b5be227b9-OrionContent/demo/swarm-blueprint/docker-swarm.yml
+
+  docker_host_url:
+    description: Docker Host
+    value:
+      str_replace:
+        template: |
+          tcp://__ip_address__:2375/
+        params:
+          __ip_address__: { get_attr: [manager__to__private_network_id__floating_ip, floating_ip_address] }
+
