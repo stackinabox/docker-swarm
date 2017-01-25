@@ -303,35 +303,19 @@ resources:
 outputs:
   blueprint_url:
     description: Blueprint Origin URL
-    value:  http://192.168.27.100:9080/landscaper/view/projects?open=demo_fac59e2a_9b9f_4618_a93b_17ba6e2cf20c-OrionContent/swarm-blueprint/docker-swarm.yml
-
-  step_1_open_console:
-    description: Step 1: Open the web-based stackinabox console (username: demo password: labstack)
-    value: http://console.stackinabox.io:4200
+    value:  
+      str_replace:
+        template: |
+          http://192.168.27.100:9080/landscaper/view/projects?open=demo_fac59e2a_9b9f_4618_a93b_17ba6e2cf20c-OrionContent/swarm-blueprint/docker-swarm.yml
+        params:
     
-  step_2_download_client_bundle:
-    description: Step 2: Grab the swarm client bundle
+  docker_host:
+    description: Public Docker Host
     value:
       str_replace:
         template: |
-          scp -i %path/to/__key_name__% ubuntu@__ip_address__:~/client_bundle.tgz ~/
+          __ip_address__
         params:
           __ip_address__: { get_attr: [manager__to__private_network__floating_ip, floating_ip_address] }
           __key_name__: { get_param: key_name }
-          
-  step_3_untar_client_bundle:
-    description: Step 3: Untar client bundle
-    value: tar -xvf ~/client_bundle.tgz -C ~/
-  
-  step_4_setup_swarm_hosts:
-    description: Step 4: Run script to setup swarm hosts resolution
-    value: ~/.docker/setup_hosts.sh
-    
-  step_5_source_dockerc:
-    description: Step 5: source dockerc file to turn on tls security
-    value: source ~/.docker/dockerc
-    
-  step_6_test_swarm_connection:
-    description: Step 6: test connectivity to the swarm
-    value: docker version
 
