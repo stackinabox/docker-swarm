@@ -303,11 +303,7 @@ resources:
 outputs:
   blueprint_url:
     description: Blueprint Origin URL
-    value:  
-      str_replace:
-        template: |
-          http://192.168.27.100:9080/landscaper/view/projects?open=demo_fac59e2a_9b9f_4618_a93b_17ba6e2cf20c-OrionContent/swarm-blueprint/docker-swarm.yml
-        params:
+    value: http://192.168.27.100:9080/landscaper/view/projects?open=demo_fac59e2a_9b9f_4618_a93b_17ba6e2cf20c-OrionContent/swarm-blueprint/docker-swarm.yml
     
   docker_host:
     description: Public Docker Host
