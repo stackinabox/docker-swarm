@@ -13,16 +13,14 @@ parameters:
     type: string
     description: 'Name of availability zone in which to create the instance'
     default: 'nova'
-  public_network_id:
+  public_network:
     type: string
     label: 'Public Network'
     description: 'Generated for floating IP'
-    default: 'public_network_id'
-  private_network_id:
+  private_network:
     type: string
     label: 'Private Network'
     description: 'Generated to reference ''private'' network.'
-    default: 'private_network_id'
   manager:
     type: string
     description: 'OS Image for the Docker Swarm Manager Servers'
@@ -52,7 +50,7 @@ parameters:
 parameter_groups:
     - { label: 'Agent Parameters', parameters: [ucd_password, ucd_relay_url, ucd_server_url, ucd_user] }
     - { label: 'Image Parameters', parameters: [flavor, key_name, manager, worker] }
-    - { label: 'Network Parameters', parameters: [availability_zone, private_network_id, public_network_id] }
+    - { label: 'Network Parameters', parameters: [availability_zone, private_network, public_network] }
 resources:
 
   manager-srv:
@@ -61,8 +59,7 @@ resources:
       user_data: {get_resource: manager_mime }
       user_data_format: RAW
       networks:
-          - port: {get_resource: manager__to__private_network_id__port }
-      name: manager
+          - port: {get_resource: manager__to__private_network__port }
       image: {get_param: manager } # ubuntu-14.04-amd64
       flavor: { get_param: flavor }
       key_name: { get_param: key_name }
@@ -118,19 +115,22 @@ resources:
       ucd_password: { get_param: ucd_password }
       application: { get_attr: [resource_tree, application_name] }
       environment_name: { get_attr: [resource_tree, environment_name] }
+      inputs:
+        public_ip: { get_attr: [manager__to__private_network__floating_ip, floating_ip_address] }
+        public_hostname: { get_attr: [manager-srv, name] }
 
-  manager__to__private_network_id__floating_ip:
+  manager__to__private_network__floating_ip:
     type: OS::Neutron::FloatingIP
     properties:
-      floating_network_id: { get_param: public_network_id }
-      port_id: {get_resource: manager__to__private_network_id__port }
+      floating_network_id: { get_param: public_network }
+      port_id: {get_resource: manager__to__private_network__port }
 
-  manager__to__private_network_id__port:
+  manager__to__private_network__port:
     type: OS::Neutron::Port
     properties:
       security_groups:
         - { get_resource: docker-swarm-sg }
-      network_id: { get_param: private_network_id }
+      network_id: {get_param: private_network }
       replacement_policy: AUTO   #TODO remove this if using HEAT version Icehouse!
 
   docker-swarm-sg:
@@ -147,6 +147,12 @@ resources:
         - direction: ingress
           port_range_min: 2375
           port_range_max: 2375
+          protocol: tcp
+          ethertype: IPv4
+          remote_ip_prefix: 0.0.0.0/0
+        - direction: ingress
+          port_range_min: 2376
+          port_range_max: 2376
           protocol: tcp
           ethertype: IPv4
           remote_ip_prefix: 0.0.0.0/0
@@ -184,7 +190,7 @@ resources:
   autoscaling-group:
     type: OS::Heat::AutoScalingGroup
     properties:
-      min_size: 1
+      min_size: 3
       max_size: 10
       resource:
           type: ./nested/docker-swarm_worker.yaml
@@ -196,53 +202,53 @@ resources:
             ucd_password: { get_param: ucd_password }
             ucd_user: { get_param: ucd_user }
             ucd_server_url: { get_param: ucd_server_url }
-            private_network_id: { get_param: private_network_id }
+            private_network: {get_param: private_network }
             worker: { get_param: worker }
             flavor: { get_param: flavor }
             key_name: { get_param: key_name }
             availability_zone: { get_param: availability_zone }
 
-  autoscaling-group_scaleup_policy:
-    type: OS::Heat::ScalingPolicy
-    properties:
-      adjustment_type: change_in_capacity
-      auto_scaling_group_id: {get_resource: autoscaling-group}
-      cooldown: 60
-      scaling_adjustment: 1
-
-  autoscaling-group_scaledown_policy:
-    type: OS::Heat::ScalingPolicy
-    properties:
-      adjustment_type: change_in_capacity
-      auto_scaling_group_id: {get_resource: autoscaling-group}
-      cooldown: 60
-      scaling_adjustment: -1
-
-  autoscaling-group_scaleup_policy_cpu_alarm_high:
-    type: OS::Ceilometer::Alarm
-    properties:
-      meter_name: cpu_util
-      statistic: avg
-      period: 60
-      evaluation_periods: 1
-      threshold: 50
-      alarm_actions:
-        - {get_attr: [autoscaling-group_scaleup_policy, alarm_url]}
-      matching_metadata: {'metadata.user_metadata.stack': {get_param: "OS::stack_id"}}
-      comparison_operator: gt
-
-  autoscaling-group_scaledown_policy_cpu_alarm_low:
-    type: OS::Ceilometer::Alarm
-    properties:
-      meter_name: cpu_util
-      statistic: avg
-      period: 60
-      evaluation_periods: 1
-      threshold: 15
-      alarm_actions:
-        - {get_attr: [autoscaling-group_scaledown_policy, alarm_url]}
-      matching_metadata: {'metadata.user_metadata.stack': {get_param: "OS::stack_id"}}
-      comparison_operator: lt
+#  autoscaling-group_scaleup_policy:
+#    type: OS::Heat::ScalingPolicy
+#    properties:
+#      adjustment_type: change_in_capacity
+#      auto_scaling_group_id: {get_resource: autoscaling-group}
+#      cooldown: 60
+#      scaling_adjustment: 1
+#
+#  autoscaling-group_scaledown_policy:
+#    type: OS::Heat::ScalingPolicy
+#    properties:
+#      adjustment_type: change_in_capacity
+#      auto_scaling_group_id: {get_resource: autoscaling-group}
+#      cooldown: 60
+#      scaling_adjustment: -1
+#
+#  autoscaling-group_scaleup_policy_cpu_alarm_high:
+#    type: OS::Ceilometer::Alarm
+#    properties:
+#      meter_name: cpu_util
+#      statistic: avg
+#      period: 60
+#      evaluation_periods: 1
+#      threshold: 50
+#      alarm_actions:
+#        - {get_attr: [autoscaling-group_scaleup_policy, alarm_url]}
+#      matching_metadata: {'metadata.user_metadata.stack': {get_param: "OS::stack_id"}}
+#      comparison_operator: gt
+#
+#  autoscaling-group_scaledown_policy_cpu_alarm_low:
+#    type: OS::Ceilometer::Alarm
+#    properties:
+#      meter_name: cpu_util
+#      statistic: avg
+#      period: 60
+#      evaluation_periods: 1
+#      threshold: 15
+#      alarm_actions:
+#        - {get_attr: [autoscaling-group_scaledown_policy, alarm_url]}
+#      matching_metadata: {'metadata.user_metadata.stack': {get_param: "OS::stack_id"}}
+#      comparison_operator: lt
 
   resource_tree:
     type: IBM::UrbanCode::ResourceTree
@@ -297,14 +303,35 @@ resources:
 outputs:
   blueprint_url:
     description: Blueprint Origin URL
-    value:  http://192.168.27.100:9080/landscaper/view/projects?open=demo_d3c9ba14_1a63_4ce0_bb87_109b5be227b9-OrionContent/demo/swarm-blueprint/docker-swarm.yml
+    value:  http://192.168.27.100:9080/landscaper/view/projects?open=demo_fac59e2a_9b9f_4618_a93b_17ba6e2cf20c-OrionContent/swarm-blueprint/docker-swarm.yml
 
-  docker_host_url:
-    description: Docker Host
+  step_1_open_console:
+    description: Step 1: Open the web-based stackinabox console (username: demo password: labstack)
+    value: http://console.stackinabox.io:4200
+    
+  step_2_download_client_bundle:
+    description: Step 2: Grab the swarm client bundle
     value:
       str_replace:
         template: |
-          tcp://__ip_address__:2375/
+          scp -i %path/to/__key_name__% ubuntu@__ip_address__:~/client_bundle.tgz ~/
         params:
-          __ip_address__: { get_attr: [manager__to__private_network_id__floating_ip, floating_ip_address] }
+          __ip_address__: { get_attr: [manager__to__private_network__floating_ip, floating_ip_address] }
+          __key_name__: { get_param: key_name }
+          
+  step_3_untar_client_bundle:
+    description: Step 3: Untar client bundle
+    value: tar -xvf ~/client_bundle.tgz -C ~/
+  
+  step_4_setup_swarm_hosts:
+    description: Step 4: Run script to setup swarm hosts resolution
+    value: ~/.docker/setup_hosts.sh
+    
+  step_5_source_dockerc:
+    description: Step 5: source dockerc file to turn on tls security
+    value: source ~/.docker/dockerc
+    
+  step_6_test_swarm_connection:
+    description: Step 6: test connectivity to the swarm
+    value: docker version
 

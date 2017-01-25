@@ -17,7 +17,7 @@ parameters:
   availability_zone:
     type: string
     description: 'Name of availability zone in which to create the instance'
-  private_network_id:
+  private_network:
     type: string
     description: 'Generated to reference ''private_network_id'' network.'
   ucd_server_url:
@@ -47,7 +47,7 @@ parameters:
     label: Docker Swarm Sg
 parameter_groups:
     - { label: 'Agent Parameters', parameters: [application_name, environment_name, ucd_password, ucd_server_url, ucd_user] }
-    - { label: 'Network Parameters', parameters: [private_network_id] }
+    - { label: 'Network Parameters', parameters: [private_network] }
     - { label: 'Security Parameters', parameters: [docker-swarm-sg] }
 resources:
   worker-srv:
@@ -57,7 +57,6 @@ resources:
         user_data_format: RAW
         networks:
             - port: { get_resource: worker__to__private_network_id__port  }
-        name: worker
         image: {get_param: worker }  # ubuntu-14.04-amd64
         flavor: { get_param: flavor }
         key_name: { get_param: key_name }
@@ -66,8 +65,29 @@ resources:
           "__os_type__" : "Linux"
 
 
-  docker-engine1:
+  docker-engine2:
     depends_on: docker-engine
+    type: IBM::UrbanCode::SoftwareDeploy::UCD
+    properties:
+      apply_config: { get_resource: docker-engine_sw_config2 }
+      server: worker-srv
+      version: '1.13'
+      agent_timeout: "360"
+
+  docker-engine_sw_config2:
+    type: IBM::UrbanCode::SoftwareConfig::UCD
+    properties: 
+      name: "docker-engine"
+      component_process: wait
+      component_process_timeout: "300"
+      ucd_server_url: { get_param: ucd_server_url } # these should come from resource_tree
+      ucd_username: { get_param: ucd_user }
+      ucd_password: { get_param: ucd_password }
+      application: { get_param: application_name }
+      environment_name: { get_param: environment_name }
+
+  docker-engine1:
+    depends_on: docker-engine2
     type: IBM::UrbanCode::SoftwareDeploy::UCD
     properties:
       apply_config: { get_resource: docker-engine_sw_config1 }
@@ -119,7 +139,7 @@ resources:
     properties:
       security_groups:
           - { get_param: docker-swarm-sg }
-      network_id: { get_param: private_network_id }
+      network_id: {get_param: private_network }
       replacement_policy: AUTO   #TODO remove this if using HEAT version Icehouse!
 
   ucd_agent_install_linux:
@@ -165,5 +185,5 @@ resources:
 outputs:
   blueprint_url:
     description: Blueprint Origin URL
-    value:  http://192.168.27.100:9080/landscaper/view/projects?open=demo_d3c9ba14_1a63_4ce0_bb87_109b5be227b9-OrionContent/demo/nested/docker-swarm_worker.yml
+    value:  http://192.168.27.100:9080/landscaper/view/projects?open=demo_fac59e2a_9b9f_4618_a93b_17ba6e2cf20c-OrionContent/swarm-blueprint/nested/docker-swarm_worker.yml
 
