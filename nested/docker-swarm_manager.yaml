@@ -2,12 +2,12 @@
 heat_template_version: 2013-05-23
 
 description: >
-  Created 1/24/17 by demo. For Cloud AutoScalng Group in blueprint 'docker-swarm'
+  Created 1/30/17 by demo. For Cloud AutoScalng Group in blueprint 'docker-swarm'
 
 parameters:
-  worker:
+  manager:
     type: string
-    description: 'OS Image for the web server'
+    description: 'OS Image for the Docker Swarm Manager Servers'
   flavor:
     type: string
     description: 'Flavor to be used for compute instance'
@@ -19,11 +19,14 @@ parameters:
     description: 'Name of availability zone in which to create the instance'
   private_network:
     type: string
-    description: 'Generated to reference ''private_network_id'' network.'
+    description: 'Generated to reference ''private_network'' network.'
   docker-swarm-sg:
     type: string
     description: 'Generated to reference a security group'
     label: Docker Swarm Sg
+  public_network_id:
+    type: string
+    description: 'Generated for floating IP'
   ucd_server_url:
     default: http://ucd.stackinabox.io:80
     type: string
@@ -47,17 +50,17 @@ parameters:
     description: 'The server URL for an agent relay - leave as ''None'' to enable agents to communicate with server directly.'
 parameter_groups:
     - { label: 'Agent Parameters', parameters: [application_name, environment_name, ucd_password, ucd_server_url, ucd_user] }
-    - { label: 'Network Parameters', parameters: [private_network] }
+    - { label: 'Network Parameters', parameters: [private_network, public_network_id] }
     - { label: 'Security Parameters', parameters: [docker-swarm-sg] }
 resources:
-  worker-srv:
+  manager-srv:
       type: OS::Nova::Server
       properties:
-        user_data: {get_resource: worker-srv_mime}
+        user_data: {get_resource: manager-srv_mime}
         user_data_format: RAW
         networks:
-            - port: { get_resource: worker__to__private_network_id__port  }
-        image: {get_param: worker }  # ubuntu-14.04-amd64
+            - port: { get_resource: manager-srv__to__private_network1__port  }
+        image: {get_param: manager } # ubuntu-14.04-amd64
         flavor: { get_param: flavor }
         key_name: { get_param: key_name }
         availability_zone: { get_param: availability_zone }
@@ -70,7 +73,7 @@ resources:
     type: IBM::UrbanCode::SoftwareDeploy::UCD
     properties:
       apply_config: { get_resource: docker_sw_config2 }
-      server: worker-srv
+      server: manager-srv
       version: '1.13'
       agent_timeout: "360"
 
@@ -78,7 +81,7 @@ resources:
     type: IBM::UrbanCode::SoftwareConfig::UCD
     properties: 
       name: "docker"
-      component_process: 'create swarm worker'
+      component_process: 'create swarm manager'
       component_process_timeout: "300"
       ucd_server_url: { get_param: ucd_server_url } # these should come from resource_tree
       ucd_username: { get_param: ucd_user }
@@ -94,7 +97,7 @@ resources:
     type: IBM::UrbanCode::SoftwareDeploy::UCD
     properties:
       apply_config: { get_resource: docker_sw_config1 }
-      server: worker-srv
+      server: manager-srv
       version: '1.13'
       agent_timeout: "360"
 
@@ -102,7 +105,7 @@ resources:
     type: IBM::UrbanCode::SoftwareConfig::UCD
     properties: 
       name: "docker"
-      component_process: wait
+      component_process: 'wait for consul service'
       component_process_timeout: "300"
       ucd_server_url: { get_param: ucd_server_url } # these should come from resource_tree
       ucd_username: { get_param: ucd_user }
@@ -113,7 +116,7 @@ resources:
         consul-ip : ""
         swarm-manager-ip : ""
 
-  worker-srv_mime:
+  manager-srv_mime:
     type: OS::Heat::MultipartMime
     properties:
       parts:
@@ -124,7 +127,7 @@ resources:
     type: IBM::UrbanCode::SoftwareDeploy::UCD
     properties:
       apply_config: { get_resource: docker_sw_config }
-      server: worker-srv
+      server: manager-srv
       version: '1.13'
       agent_timeout: "360"
 
@@ -143,12 +146,18 @@ resources:
         consul-ip : ""
         swarm-manager-ip : ""
 
-  worker__to__private_network_id__port:
+  manager-srv__to__private_network1__port__floating_ip:
+    type: OS::Neutron::FloatingIP
+    properties:
+      floating_network_id: { get_param: public_network_id }
+      port_id: { get_resource: manager-srv__to__private_network1__port }
+
+  manager-srv__to__private_network1__port:
     type: OS::Neutron::Port
     properties:
       security_groups:
           - { get_param: docker-swarm-sg }
-      network_id: {get_param: private_network }
+      network_id: { get_param: private_network }
       replacement_policy: AUTO   #TODO remove this if using HEAT version Icehouse!
 
   ucd_agent_install_linux:
@@ -194,5 +203,5 @@ resources:
 outputs:
   blueprint_url:
     description: Blueprint Origin URL
-    value:  http://192.168.27.100:9080/landscaper/view/projects?open=demo_fac59e2a_9b9f_4618_a93b_17ba6e2cf20c-OrionContent/swarm-blueprint/nested/docker-swarm_worker.yml
+    value:  http://designer.stackinabox.io:9080/landscaper/view/projects?open=demo_1c27833d_c593_49f0_9635_9f156a7bbc1b-OrionContent/swarm-blueprint/nested/docker-swarm_manager.yml
 

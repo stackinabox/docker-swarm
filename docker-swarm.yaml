@@ -13,19 +13,11 @@ parameters:
     type: string
     description: 'Name of availability zone in which to create the instance'
     default: 'nova'
-  public_network:
-    type: string
-    label: 'Public Network'
-    description: 'Generated for floating IP'
   private_network:
+    default: private_network
     type: string
     label: 'Private Network'
     description: 'Generated to reference ''private'' network.'
-  manager:
-    type: string
-    description: 'OS Image for the Docker Swarm Manager Servers'
-    label: Manager
-    default: 
   worker:
     type: string
     description: 'OS Image for the Docker Swarm Worker Servers'
@@ -47,91 +39,19 @@ parameters:
     type: string
     description: 'The server URL for an agent relay - leave as ''None'' to enable agents to communicate with server directly.'
     default: 'None'
+  manager:
+    type: string
+    description: 'OS Image for the Docker Swarm Manager Servers'
+    label: Manager
+  public_network_id:
+    type: string
+    description: 'Generated for floating IP'
+    default: 'public_network_id'
 parameter_groups:
     - { label: 'Agent Parameters', parameters: [ucd_password, ucd_relay_url, ucd_server_url, ucd_user] }
     - { label: 'Image Parameters', parameters: [flavor, key_name, manager, worker] }
-    - { label: 'Network Parameters', parameters: [availability_zone, private_network, public_network] }
+    - { label: 'Network Parameters', parameters: [availability_zone, private_network, public_network_id] }
 resources:
-
-  manager-srv:
-    type: OS::Nova::Server
-    properties:
-      user_data: {get_resource: manager_mime }
-      user_data_format: RAW
-      networks:
-          - port: {get_resource: manager__to__private_network__port }
-      image: {get_param: manager } # ubuntu-14.04-amd64
-      flavor: { get_param: flavor }
-      key_name: { get_param: key_name }
-      availability_zone: { get_param: availability_zone }
-      metadata: 
-        "__os_type__" : "Linux"
-
-
-  docker-engine2:
-    depends_on: docker-engine
-    type: IBM::UrbanCode::SoftwareDeploy::UCD
-    properties:
-      apply_config: { get_resource: docker-engine_sw_config1 }
-      server: manager-srv
-      version: '1.13'
-      agent_timeout: "360"
-
-  docker-engine_sw_config1:
-    type: IBM::UrbanCode::SoftwareConfig::UCD
-    properties: 
-      name: "docker-engine"
-      component_process: 'create new docker swarm'
-      component_process_timeout: "300"
-      ucd_server_url: { get_param: ucd_server_url } # these should come from resource_tree
-      ucd_username: { get_param: ucd_user }
-      ucd_password: { get_param: ucd_password }
-      application: { get_attr: [resource_tree, application_name] }
-      environment_name: { get_attr: [resource_tree, environment_name] }
-
-  manager_mime:
-    type: OS::Heat::MultipartMime
-    properties:
-      parts:
-        - config: { get_resource: ucd_agent_install_linux }
-          subtype: "x-shellscript"
-
-  docker-engine:
-    type: IBM::UrbanCode::SoftwareDeploy::UCD
-    properties:
-      apply_config: { get_resource: docker-engine_sw_config }
-      server: manager-srv
-      version: '1.13'
-      agent_timeout: "360"
-
-  docker-engine_sw_config:
-    type: IBM::UrbanCode::SoftwareConfig::UCD
-    properties: 
-      name: "docker-engine"
-      component_process: 'install docker-engine'
-      component_process_timeout: "300"
-      ucd_server_url: { get_param: ucd_server_url } # these should come from resource_tree
-      ucd_username: { get_param: ucd_user }
-      ucd_password: { get_param: ucd_password }
-      application: { get_attr: [resource_tree, application_name] }
-      environment_name: { get_attr: [resource_tree, environment_name] }
-      inputs:
-        public_ip: { get_attr: [manager__to__private_network__floating_ip, floating_ip_address] }
-        public_hostname: { get_attr: [manager-srv, name] }
-
-  manager__to__private_network__floating_ip:
-    type: OS::Neutron::FloatingIP
-    properties:
-      floating_network_id: { get_param: public_network }
-      port_id: {get_resource: manager__to__private_network__port }
-
-  manager__to__private_network__port:
-    type: OS::Neutron::Port
-    properties:
-      security_groups:
-        - { get_resource: docker-swarm-sg }
-      network_id: {get_param: private_network }
-      replacement_policy: AUTO   #TODO remove this if using HEAT version Icehouse!
 
   docker-swarm-sg:
     type: OS::Neutron::SecurityGroup
@@ -191,14 +111,14 @@ resources:
     type: OS::Heat::AutoScalingGroup
     properties:
       min_size: 3
-      max_size: 10
+      max_size: 20
       resource:
           type: ./nested/docker-swarm_worker.yaml
           properties:
-            docker-swarm-sg: { get_resource: docker-swarm-sg }
-            ucd_relay_url: { get_param: ucd_relay_url }
             environment_name: { get_attr: [resource_tree, environment_name ] }
             application_name: { get_attr: [resource_tree, application_name ] }
+            docker-swarm-sg: { get_resource: docker-swarm-sg }
+            ucd_relay_url: { get_param: ucd_relay_url }
             ucd_password: { get_param: ucd_password }
             ucd_user: { get_param: ucd_user }
             ucd_server_url: { get_param: ucd_server_url }
@@ -207,6 +127,29 @@ resources:
             flavor: { get_param: flavor }
             key_name: { get_param: key_name }
             availability_zone: { get_param: availability_zone }
+
+  autoscaling-group1:
+    type: OS::Heat::AutoScalingGroup
+    properties:
+      min_size: 1
+      max_size: 5
+      resource:
+          type: nested/docker-swarm_manager.yaml
+          properties:
+            environment_name: { get_attr: [resource_tree, environment_name ] }
+            application_name: { get_attr: [resource_tree, application_name ] }
+            public_network_id: { get_param: public_network_id }
+            docker-swarm-sg: { get_resource: docker-swarm-sg }
+            ucd_relay_url: { get_param: ucd_relay_url }
+            ucd_password: { get_param: ucd_password }
+            ucd_user: { get_param: ucd_user }
+            ucd_server_url: { get_param: ucd_server_url }
+            private_network: {get_param: private_network }
+            manager: { get_param: manager }
+            flavor: { get_param: flavor }
+            key_name: { get_param: key_name }
+            availability_zone: { get_param: availability_zone }
+
 
 #  autoscaling-group_scaleup_policy:
 #    type: OS::Heat::ScalingPolicy
@@ -249,6 +192,124 @@ resources:
 #        - {get_attr: [autoscaling-group_scaledown_policy, alarm_url]}
 #      matching_metadata: {'metadata.user_metadata.stack': {get_param: "OS::stack_id"}}
 #      comparison_operator: lt
+
+  autoscaling-group1_scaleup_policy:
+    type: OS::Heat::ScalingPolicy
+    properties:
+      adjustment_type: change_in_capacity
+      auto_scaling_group_id: {get_resource: autoscaling-group1}
+      cooldown: 60
+      scaling_adjustment: 1
+
+  autoscaling-group1_scaledown_policy:
+    type: OS::Heat::ScalingPolicy
+    properties:
+      adjustment_type: change_in_capacity
+      auto_scaling_group_id: {get_resource: autoscaling-group1}
+      cooldown: 60
+      scaling_adjustment: -1
+
+  autoscaling-group1_scaleup_policy_cpu_alarm_high:
+    type: OS::Ceilometer::Alarm
+    properties:
+      meter_name: cpu_util
+      statistic: avg
+      period: 60
+      evaluation_periods: 1
+      threshold: 50
+      alarm_actions:
+        - {get_attr: [autoscaling-group1_scaleup_policy, alarm_url]}
+      matching_metadata: {'metadata.user_metadata.stack': {get_param: "OS::stack_id"}}
+      comparison_operator: gt
+
+  autoscaling-group1_scaledown_policy_cpu_alarm_low:
+    type: OS::Ceilometer::Alarm
+    properties:
+      meter_name: cpu_util
+      statistic: avg
+      period: 60
+      evaluation_periods: 1
+      threshold: 15
+      alarm_actions:
+        - {get_attr: [autoscaling-group1_scaledown_policy, alarm_url]}
+      matching_metadata: {'metadata.user_metadata.stack': {get_param: "OS::stack_id"}}
+      comparison_operator: lt
+
+  consul:
+    type: OS::Nova::Server
+    properties:
+      user_data: {get_resource: consul_mime }
+      user_data_format: RAW
+      networks:
+          - port: {get_resource: consul__to__private_network__port }
+      image: "974586fb-4b14-423e-a0af-4d12a067ea20" # ubuntu-1604-amd64
+      flavor: { get_param: flavor }
+      key_name: { get_param: key_name }
+      availability_zone: { get_param: availability_zone }
+      metadata: 
+        "__os_type__" : "Linux"
+
+  docker1:
+    depends_on: docker
+    type: IBM::UrbanCode::SoftwareDeploy::UCD
+    properties:
+      apply_config: { get_resource: docker_sw_config1 }
+      server: consul
+      version: '1.13'
+      agent_timeout: "360"
+
+  docker_sw_config1:
+    type: IBM::UrbanCode::SoftwareConfig::UCD
+    properties: 
+      name: "docker"
+      component_process: 'create consul service'
+      component_process_timeout: "300"
+      ucd_server_url: { get_param: ucd_server_url } # these should come from resource_tree
+      ucd_username: { get_param: ucd_user }
+      ucd_password: { get_param: ucd_password }
+      application: { get_attr: [resource_tree, application_name] }
+      environment_name: { get_attr: [resource_tree, environment_name] }
+      inputs:     # component's environment property definitions
+        consul-ip : ""
+        swarm-manager-ip : ""
+
+  consul_mime:
+    type: OS::Heat::MultipartMime
+    properties:
+      parts:
+        - config: { get_resource: ucd_agent_install_linux }
+          subtype: "x-shellscript"
+
+  docker:
+    type: IBM::UrbanCode::SoftwareDeploy::UCD
+    properties:
+      apply_config: { get_resource: docker_sw_config }
+      server: consul
+      version: '1.13'
+      agent_timeout: "360"
+
+  docker_sw_config:
+    type: IBM::UrbanCode::SoftwareConfig::UCD
+    properties: 
+      name: "docker"
+      component_process: 'install docker-engine'
+      component_process_timeout: "300"
+      ucd_server_url: { get_param: ucd_server_url } # these should come from resource_tree
+      ucd_username: { get_param: ucd_user }
+      ucd_password: { get_param: ucd_password }
+      application: { get_attr: [resource_tree, application_name] }
+      environment_name: { get_attr: [resource_tree, environment_name] }
+      inputs:     # component's environment property definitions
+        consul-ip : ""
+        swarm-manager-ip : ""
+
+  consul__to__private_network__port:
+    type: OS::Neutron::Port
+    properties:
+      security_groups:
+          - { get_resource: docker-swarm-sg }
+      network_id: { get_param: private_network }
+      replacement_policy: AUTO   #TODO remove this if using HEAT version Icehouse!
 
   resource_tree:
     type: IBM::UrbanCode::ResourceTree
@@ -304,14 +365,4 @@ outputs:
   blueprint_url:
     description: Blueprint Origin URL
     value: http://192.168.27.100:9080/landscaper/view/projects?open=demo_fac59e2a_9b9f_4618_a93b_17ba6e2cf20c-OrionContent/swarm-blueprint/docker-swarm.yml
-    
-  docker_host:
-    description: Public Docker Host
-    value:
-      str_replace:
-        template: |
-          __ip_address__
-        params:
-          __ip_address__: { get_attr: [manager__to__private_network__floating_ip, floating_ip_address] }
-          __key_name__: { get_param: key_name }
 
