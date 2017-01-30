@@ -106,6 +106,18 @@ resources:
           protocol: udp
           ethertype: IPv4
           remote_ip_prefix: 0.0.0.0/0
+        - direction: ingress
+          port_range_min: 4000
+          port_range_max: 4000
+          protocol: tcp
+          ethertype: IPv4
+          remote_ip_prefix: 0.0.0.0/0
+        - direction: ingress
+          port_range_min: 8500
+          port_range_max: 8500
+          protocol: tcp
+          ethertype: IPv4
+          remote_ip_prefix: 0.0.0.0/0
           
   autoscaling-group:
     type: OS::Heat::AutoScalingGroup
@@ -193,47 +205,47 @@ resources:
 #      matching_metadata: {'metadata.user_metadata.stack': {get_param: "OS::stack_id"}}
 #      comparison_operator: lt
 
-  autoscaling-group1_scaleup_policy:
-    type: OS::Heat::ScalingPolicy
-    properties:
-      adjustment_type: change_in_capacity
-      auto_scaling_group_id: {get_resource: autoscaling-group1}
-      cooldown: 60
-      scaling_adjustment: 1
-
-  autoscaling-group1_scaledown_policy:
-    type: OS::Heat::ScalingPolicy
-    properties:
-      adjustment_type: change_in_capacity
-      auto_scaling_group_id: {get_resource: autoscaling-group1}
-      cooldown: 60
-      scaling_adjustment: -1
-
-  autoscaling-group1_scaleup_policy_cpu_alarm_high:
-    type: OS::Ceilometer::Alarm
-    properties:
-      meter_name: cpu_util
-      statistic: avg
-      period: 60
-      evaluation_periods: 1
-      threshold: 50
-      alarm_actions:
-        - {get_attr: [autoscaling-group1_scaleup_policy, alarm_url]}
-      matching_metadata: {'metadata.user_metadata.stack': {get_param: "OS::stack_id"}}
-      comparison_operator: gt
-
-  autoscaling-group1_scaledown_policy_cpu_alarm_low:
-    type: OS::Ceilometer::Alarm
-    properties:
-      meter_name: cpu_util
-      statistic: avg
-      period: 60
-      evaluation_periods: 1
-      threshold: 15
-      alarm_actions:
-        - {get_attr: [autoscaling-group1_scaledown_policy, alarm_url]}
-      matching_metadata: {'metadata.user_metadata.stack': {get_param: "OS::stack_id"}}
-      comparison_operator: lt
+#  autoscaling-group1_scaleup_policy:
+#    type: OS::Heat::ScalingPolicy
+#    properties:
+#      adjustment_type: change_in_capacity
+#      auto_scaling_group_id: {get_resource: autoscaling-group1}
+#      cooldown: 60
+#      scaling_adjustment: 1
+#
+#  autoscaling-group1_scaledown_policy:
+#    type: OS::Heat::ScalingPolicy
+#    properties:
+#      adjustment_type: change_in_capacity
+#      auto_scaling_group_id: {get_resource: autoscaling-group1}
+#      cooldown: 60
+#      scaling_adjustment: -1
+#
+#  autoscaling-group1_scaleup_policy_cpu_alarm_high:
+#    type: OS::Ceilometer::Alarm
+#    properties:
+#      meter_name: cpu_util
+#      statistic: avg
+#      period: 60
+#      evaluation_periods: 1
+#      threshold: 50
+#      alarm_actions:
+#        - {get_attr: [autoscaling-group1_scaleup_policy, alarm_url]}
+#      matching_metadata: {'metadata.user_metadata.stack': {get_param: "OS::stack_id"}}
+#      comparison_operator: gt
+#
+#  autoscaling-group1_scaledown_policy_cpu_alarm_low:
+#    type: OS::Ceilometer::Alarm
+#    properties:
+#      meter_name: cpu_util
+#      statistic: avg
+#      period: 60
+#      evaluation_periods: 1
+#      threshold: 15
+#      alarm_actions:
+#        - {get_attr: [autoscaling-group1_scaledown_policy, alarm_url]}
+#      matching_metadata: {'metadata.user_metadata.stack': {get_param: "OS::stack_id"}}
+#      comparison_operator: lt
 
   consul:
     type: OS::Nova::Server
@@ -269,9 +281,6 @@ resources:
       ucd_password: { get_param: ucd_password }
       application: { get_attr: [resource_tree, application_name] }
       environment_name: { get_attr: [resource_tree, environment_name] }
-      inputs:     # component's environment property definitions
-        consul-ip : ""
-        swarm-manager-ip : ""
 
   consul_mime:
     type: OS::Heat::MultipartMime
@@ -299,9 +308,6 @@ resources:
       ucd_password: { get_param: ucd_password }
       application: { get_attr: [resource_tree, application_name] }
       environment_name: { get_attr: [resource_tree, environment_name] }
-      inputs:     # component's environment property definitions
-        consul-ip : ""
-        swarm-manager-ip : ""
 
   consul__to__private_network__port:
     type: OS::Neutron::Port

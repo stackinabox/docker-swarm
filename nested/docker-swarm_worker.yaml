@@ -85,9 +85,6 @@ resources:
       ucd_password: { get_param: ucd_password }
       application: { get_param: application_name }
       environment_name: { get_param: environment_name }
-      inputs:     # component's environment property definitions
-        consul-ip : ""
-        swarm-manager-ip : ""
 
   docker1:
     depends_on: docker
@@ -102,16 +99,13 @@ resources:
     type: IBM::UrbanCode::SoftwareConfig::UCD
     properties: 
       name: "docker"
-      component_process: wait
+      component_process: 'wait for swarm manager'
       component_process_timeout: "300"
       ucd_server_url: { get_param: ucd_server_url } # these should come from resource_tree
       ucd_username: { get_param: ucd_user }
       ucd_password: { get_param: ucd_password }
       application: { get_param: application_name }
       environment_name: { get_param: environment_name }
-      inputs:     # component's environment property definitions
-        consul-ip : ""
-        swarm-manager-ip : ""
 
   worker-srv_mime:
     type: OS::Heat::MultipartMime
@@ -139,9 +133,6 @@ resources:
       ucd_password: { get_param: ucd_password }
       application: { get_param: application_name }
       environment_name: { get_param: environment_name }
-      inputs:     # component's environment property definitions
-        consul-ip : ""
-        swarm-manager-ip : ""
 
   worker__to__private_network_id__port:
     type: OS::Neutron::Port

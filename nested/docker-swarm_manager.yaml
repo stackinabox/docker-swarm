@@ -88,9 +88,6 @@ resources:
       ucd_password: { get_param: ucd_password }
       application: { get_param: application_name }
       environment_name: { get_param: environment_name }
-      inputs:     # component's environment property definitions
-        consul-ip : ""
-        swarm-manager-ip : ""
 
   docker1:
     depends_on: docker
@@ -112,9 +109,6 @@ resources:
       ucd_password: { get_param: ucd_password }
       application: { get_param: application_name }
       environment_name: { get_param: environment_name }
-      inputs:     # component's environment property definitions
-        consul-ip : ""
-        swarm-manager-ip : ""
 
   manager-srv_mime:
     type: OS::Heat::MultipartMime
@@ -142,9 +136,6 @@ resources:
       ucd_password: { get_param: ucd_password }
       application: { get_param: application_name }
       environment_name: { get_param: environment_name }
-      inputs:     # component's environment property definitions
-        consul-ip : ""
-        swarm-manager-ip : ""
 
   manager-srv__to__private_network1__port__floating_ip:
     type: OS::Neutron::FloatingIP
