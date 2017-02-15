@@ -17,13 +17,6 @@ parameters:
   availability_zone:
     type: string
     description: 'Name of availability zone in which to create the instance'
-  private_network:
-    type: string
-    description: 'Generated to reference ''private_network_id'' network.'
-  docker-swarm-sg:
-    type: string
-    description: 'Generated to reference a security group'
-    label: Docker Swarm Sg
   ucd_server_url:
     default: http://ucd.stackinabox.io:80
     type: string
@@ -45,18 +38,26 @@ parameters:
   ucd_relay_url:
     type: string
     description: 'The server URL for an agent relay - leave as ''None'' to enable agents to communicate with server directly.'
+  docker-swarm-sg:
+    type: string
+    description: 'The docker swarm security group'
+  private_network:
+    default: private_network
+    type: string
+    label: 'Private Network'
+    description: 'Generated to reference ''private'' network.'
 parameter_groups:
     - { label: 'Agent Parameters', parameters: [application_name, environment_name, ucd_password, ucd_server_url, ucd_user] }
     - { label: 'Network Parameters', parameters: [private_network] }
-    - { label: 'Security Parameters', parameters: [docker-swarm-sg] }
 resources:
-  worker-srv:
+
+  docker-swarm-worker-srv:
       type: OS::Nova::Server
       properties:
+        networks:
+            - port: { get_resource: worker-srv__to__private__port  }
         user_data: {get_resource: worker-srv_mime}
         user_data_format: RAW
-        networks:
-            - port: { get_resource: worker__to__private_network_id__port  }
         image: {get_param: worker }  # ubuntu-14.04-amd64
         flavor: { get_param: flavor }
         key_name: { get_param: key_name }
@@ -65,20 +66,28 @@ resources:
           "__os_type__" : "Linux"
 
 
+  worker-srv__to__private__port:
+    type: OS::Neutron::Port
+    properties:
+      security_groups:
+          - { get_param: docker-swarm-sg }
+      network_id: {get_param: private_network }  # Generated to reference 'private' network.
+      replacement_policy: AUTO   #TODO remove this if using HEAT version Icehouse!
+
   docker2:
     depends_on: docker1
     type: IBM::UrbanCode::SoftwareDeploy::UCD
     properties:
       apply_config: { get_resource: docker_sw_config2 }
-      server: worker-srv
+      server: docker-swarm-worker-srv
       version: '1.13'
       agent_timeout: "360"
 
   docker_sw_config2:
     type: IBM::UrbanCode::SoftwareConfig::UCD
     properties: 
-      name: "docker"
-      component_process: 'create swarm worker'
+      name: "docker-engine"
+      component_process: 'join docker swarm as worker'
       component_process_timeout: "300"
       ucd_server_url: { get_param: ucd_server_url } # these should come from resource_tree
       ucd_username: { get_param: ucd_user }
@@ -91,15 +100,15 @@ resources:
     type: IBM::UrbanCode::SoftwareDeploy::UCD
     properties:
       apply_config: { get_resource: docker_sw_config1 }
-      server: worker-srv
+      server: docker-swarm-worker-srv
       version: '1.13'
       agent_timeout: "360"
 
   docker_sw_config1:
     type: IBM::UrbanCode::SoftwareConfig::UCD
     properties: 
-      name: "docker"
-      component_process: 'wait for swarm manager'
+      name: "docker-engine"
+      component_process: wait
       component_process_timeout: "300"
       ucd_server_url: { get_param: ucd_server_url } # these should come from resource_tree
       ucd_username: { get_param: ucd_user }
@@ -118,14 +127,14 @@ resources:
     type: IBM::UrbanCode::SoftwareDeploy::UCD
     properties:
       apply_config: { get_resource: docker_sw_config }
-      server: worker-srv
+      server: docker-swarm-worker-srv
       version: '1.13'
       agent_timeout: "360"
 
   docker_sw_config:
     type: IBM::UrbanCode::SoftwareConfig::UCD
     properties: 
-      name: "docker"
+      name: "docker-engine"
       component_process: 'install docker-engine'
       component_process_timeout: "300"
       ucd_server_url: { get_param: ucd_server_url } # these should come from resource_tree
@@ -133,14 +142,6 @@ resources:
       ucd_password: { get_param: ucd_password }
       application: { get_param: application_name }
       environment_name: { get_param: environment_name }
-
-  worker__to__private_network_id__port:
-    type: OS::Neutron::Port
-    properties:
-      security_groups:
-          - { get_param: docker-swarm-sg }
-      network_id: {get_param: private_network }
-      replacement_policy: AUTO   #TODO remove this if using HEAT version Icehouse!
 
   ucd_agent_install_linux:
     type: OS::Heat::SoftwareConfig
