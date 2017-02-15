@@ -240,6 +240,9 @@ resources:
       ucd_password: { get_param: ucd_password }
       application: { get_attr: [resource_tree, application_name] }
       environment_name: { get_attr: [resource_tree, environment_name] }
+      inputs:
+        swarm-master-floating-ip: { get_attr: [ master-srv__to__private__port__floating_ip, floating_ip_address ] }
+        swarm-master-hostname: { get_attr: [ docker-swarm-master-srv, name ] }
 
   resource_tree:
     type: IBM::UrbanCode::ResourceTree
