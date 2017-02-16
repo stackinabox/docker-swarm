@@ -199,14 +199,14 @@ resources:
       apply_config: { get_resource: docker-engine_sw_config1 }
       server: docker-swarm-master-srv
       version: '1.13'
-      agent_timeout: "360"
+      agent_timeout: "720"
 
   docker-engine_sw_config1:
     type: IBM::UrbanCode::SoftwareConfig::UCD
     properties: 
       name: "docker-engine"
       component_process: 'install docker-engine'
-      component_process_timeout: "300"
+      component_process_timeout: "600"
       ucd_server_url: { get_param: ucd_server_url } # these should come from resource_tree
       ucd_username: { get_param: ucd_user }
       ucd_password: { get_param: ucd_password }
@@ -227,22 +227,22 @@ resources:
       apply_config: { get_resource: docker-engine_sw_config }
       server: docker-swarm-master-srv
       version: '1.13'
-      agent_timeout: "360"
+      agent_timeout: "720"
 
   docker-engine_sw_config:
     type: IBM::UrbanCode::SoftwareConfig::UCD
     properties: 
       name: "docker-engine"
       component_process: 'create new docker swarm'
-      component_process_timeout: "300"
+      component_process_timeout: "600"
       ucd_server_url: { get_param: ucd_server_url } # these should come from resource_tree
       ucd_username: { get_param: ucd_user }
       ucd_password: { get_param: ucd_password }
       application: { get_attr: [resource_tree, application_name] }
       environment_name: { get_attr: [resource_tree, environment_name] }
       inputs:
-        swarm-master-floating-ip: { get_attr: [ master-srv__to__private__port__floating_ip, floating_ip_address ] }
-        swarm-master-hostname: { get_attr: [ docker-swarm-master-srv, name ] }
+        swarm-master-public-ip: { get_attr: [ master-srv__to__private__port__floating_ip, floating_ip_address ] }
+        swarm-master-public-hostname: { get_attr: [ docker-swarm-master-srv, name ] }
 
   resource_tree:
     type: IBM::UrbanCode::ResourceTree

@@ -89,14 +89,14 @@ resources:
       apply_config: { get_resource: docker-engine_sw_config }
       server: docker-swarm-manager-srv
       version: '1.13'
-      agent_timeout: "360"
+      agent_timeout: "720"
 
   docker-engine_sw_config:
     type: IBM::UrbanCode::SoftwareConfig::UCD
     properties: 
       name: "docker-engine"
       component_process: wait
-      component_process_timeout: "300"
+      component_process_timeout: "600"
       ucd_server_url: { get_param: ucd_server_url } # these should come from resource_tree
       ucd_username: { get_param: ucd_user }
       ucd_password: { get_param: ucd_password }
@@ -110,14 +110,14 @@ resources:
       apply_config: { get_resource: docker_sw_config2 }
       server: docker-swarm-manager-srv
       version: '1.13'
-      agent_timeout: "360"
+      agent_timeout: "720"
 
   docker_sw_config2:
     type: IBM::UrbanCode::SoftwareConfig::UCD
     properties: 
       name: "docker-engine"
       component_process: 'join docker swarm as manager'
-      component_process_timeout: "300"
+      component_process_timeout: "600"
       ucd_server_url: { get_param: ucd_server_url } # these should come from resource_tree
       ucd_username: { get_param: ucd_user }
       ucd_password: { get_param: ucd_password }
@@ -137,14 +137,14 @@ resources:
       apply_config: { get_resource: docker_sw_config }
       server: docker-swarm-manager-srv
       version: '1.13'
-      agent_timeout: "360"
+      agent_timeout: "720"
 
   docker_sw_config:
     type: IBM::UrbanCode::SoftwareConfig::UCD
     properties: 
       name: "docker-engine"
       component_process: 'install docker-engine'
-      component_process_timeout: "300"
+      component_process_timeout: "600"
       ucd_server_url: { get_param: ucd_server_url } # these should come from resource_tree
       ucd_username: { get_param: ucd_user }
       ucd_password: { get_param: ucd_password }
