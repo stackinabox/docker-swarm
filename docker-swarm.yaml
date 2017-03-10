@@ -120,6 +120,30 @@ resources:
           protocol: tcp
           ethertype: IPv4
           remote_ip_prefix: 0.0.0.0/0
+        - direction: ingress
+          port_range_min: 80
+          port_range_max: 80
+          protocol: tcp
+          ethertype: IPv4
+          remote_ip_prefix: 0.0.0.0/0
+        - direction: ingress
+          port_range_min: 8080
+          port_range_max: 8080
+          protocol: tcp
+          ethertype: IPv4
+          remote_ip_prefix: 0.0.0.0/0
+        - direction: ingress
+          port_range_min: 9080
+          port_range_max: 9080
+          protocol: tcp
+          ethertype: IPv4
+          remote_ip_prefix: 0.0.0.0/0
+        - direction: ingress
+          port_range_min: 8001
+          port_range_max: 8002
+          protocol: tcp
+          ethertype: IPv4
+          remote_ip_prefix: 0.0.0.0/0
           
   docker-swarm-worker-asg:
     type: OS::Heat::AutoScalingGroup
